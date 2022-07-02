@@ -9,8 +9,9 @@ trait ZIOApp:
   def run: ZIO[Any]
   def main(args: Array[String]): Unit =
     run.run { result =>
-      println(s"THE RESULT WAS ${result}")
+      println(s"THE RESULT WAS: ${result}")
     }
+    Thread.sleep(3000)
 
 
 object SucceedNow extends ZIOApp:
@@ -77,7 +78,39 @@ object ForComprehension extends ZIOApp:
 object Async extends ZIOApp:
   val asyncZIO: ZIO[Int] = ZIO.async[Int] { complete =>
     println("ASYNC BEGINNETH!")
-    Tread.sleep(2000)
+    Thread.sleep(2000)
+    println("ASYNC ENDS!")
     complete(10)
   }
   override def run: ZIO[Any] = asyncZIO
+
+object Fork extends ZIOApp:
+  val asyncZIO = ZIO.async[Int] { complete =>
+    println("ASYNC STARTED!")
+    Thread.sleep(2000)
+    println("ASYNC FINISHED!")
+    complete(scala.util.Random.nextInt(999))
+  }
+
+  def printLine(message: String): ZIO[Unit] =
+    ZIO.succeed(println(message))
+
+  val forkedZIO = for {
+    fiber_1 <- asyncZIO.fork
+    fiber_2 <- asyncZIO.fork
+    _ <- printLine("NICE!")
+    int_1 <- fiber_1.join
+    int_2 <- fiber_2.join
+  } yield s"MY BEAUTIFUL INTS: $int_1, $int_2"
+
+  override def run: ZIO[Any] = forkedZIO
+
+object ZipPar extends ZIOApp:
+  val asyncZIO = ZIO.async[Int] { complete =>
+    println("ASYNC STARTED!")
+    Thread.sleep(2000)
+    println("ASYNC FINISHED!")
+    complete(scala.util.Random.nextInt(999))
+  }
+
+  override def run: ZIO[Any] = asyncZIO zipPar asyncZIO
