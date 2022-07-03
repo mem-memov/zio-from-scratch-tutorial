@@ -10,8 +10,8 @@ trait ZIO[+A] { self =>
     flatMap { a =>
       ZIO.succeed(f(a))
     }
-  def fork(zio: ZIO[A]): ZIO[Fiber[A]] = ZIO.Fork(self)
-  }
+  def fork: ZIO[Fiber[A]] = ZIO.Fork(self)
+}
 
 trait Fiber[+A]:
   def start(): Unit
@@ -67,7 +67,7 @@ object ZIO:
       }
 
   case class Fork[A](zio: ZIO[A]) extends ZIO[Fiber[A]]:
-    override def run(callback: Any => Unit): Unit = 
+    override def run(callback: Fiber[A] => Unit): Unit = 
       val fiber = new FiberImpl(zio)
       fiber.start()
       callback(fiber)

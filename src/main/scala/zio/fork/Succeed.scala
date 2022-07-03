@@ -6,6 +6,7 @@ trait ZIOApp:
     z.run { result =>
       println(s"THE RESULT IS: $result")
     }
+    Thread.sleep(3000)
   
 object AsyncExample extends ZIOApp:
   val asyncZIO = ZIO.async[String] { complete => 
