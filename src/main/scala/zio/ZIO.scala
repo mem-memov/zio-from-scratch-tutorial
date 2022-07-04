@@ -78,9 +78,6 @@ sealed trait ZIO[+A]:
 
       def erase[A](zio: ZIO[A]): Erased =
         zio
-        
-      def eraseCallback[A, B](cb: A => ZIO[B]): Cont =
-        cb
 
       val stack = scala.collection.mutable.Stack[Cont]()
 
@@ -105,7 +102,7 @@ sealed trait ZIO[+A]:
             complete(f())
 
           case ZIO.FlatMap(zio, cont) =>
-            stack.push(cont)
+            stack.push(cont.asInstanceOf[Cont])
             currentZIO = zio
 
           case ZIO.Async(register) =>

@@ -116,6 +116,6 @@ object ZipPar extends ZIOApp:
   override def run: ZIO[Any] = asyncZIO zipPar asyncZIO
 
 object StackSafety extends ZIOApp:
-  val myProgram = ZIO.succeed(println("Howdy!")).repeat(10)
+  val myProgram = ZIO.succeed(println("Howdy!")).repeat(100000)
 
   override def run: ZIO[Any] = myProgram
