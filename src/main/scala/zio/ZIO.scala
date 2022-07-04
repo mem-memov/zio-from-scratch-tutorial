@@ -74,16 +74,24 @@ sealed trait ZIO[+A]:
     def run(callback: A => Unit): Unit =
 
       type Erased = ZIO[Any]
+      type ErasedCallback = Any => Any
       type Cont = Any => Erased
 
       def erase[A](zio: ZIO[A]): Erased =
         zio
+
+      def eraseCallback[A](cb: A => Unit): ErasedCallback =
+        cb.asInstanceOf[ErasedCallback]
 
       val stack = scala.collection.mutable.Stack[Cont]()
 
       var currentZIO = erase(self)
 
       var loop = true
+
+      def resume(): Unit =
+        loop = true
+        run()
 
       def complete(value: Any): Unit =
         if stack.isEmpty then
@@ -93,27 +101,37 @@ sealed trait ZIO[+A]:
           val cont = stack.pop()
           currentZIO = cont(value)
 
-      while (loop) {
-        currentZIO match
-          case ZIO.Succeed(value) =>
-            complete(value)
+      def run(): Unit =
+        while (loop) {
+          currentZIO match
+            case ZIO.Succeed(value) =>
+              complete(value)
 
-          case ZIO.Effect(f) =>
-            complete(f())
+            case ZIO.Effect(f) =>
+              complete(f())
 
-          case ZIO.FlatMap(zio, cont) =>
-            stack.push(cont.asInstanceOf[Cont])
-            currentZIO = zio
+            case ZIO.FlatMap(zio, cont) =>
+              stack.push(cont.asInstanceOf[Cont])
+              currentZIO = zio
 
-          case ZIO.Async(register) =>
-            ???
-//            register(callback)
-          case ZIO.Fork(zio) =>
-            ???
-//            val fiber = new FiberImpl(zio)
-//            fiber.start()
-//            callback(fiber)
-      }
+            case ZIO.Async(register) =>
+              if stack.isEmpty then
+                loop = false
+                register(eraseCallback(callback))
+              else
+                loop = false
+                register { a =>
+                  currentZIO = ZIO.succeedNow(a)
+                  resume()
+                }
+
+            case ZIO.Fork(zio) =>
+              ???
+  //            val fiber = new FiberImpl(zio)
+  //            fiber.start()
+  //            callback(fiber)
+        }
+      run()
 
 object ZIO:
 
