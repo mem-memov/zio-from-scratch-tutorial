@@ -11,9 +11,7 @@ trait ZIOApp:
     run.run { result =>
       println(s"THE RESULT WAS: ${result}")
     }
-    Thread.sleep(3000)
-
-
+    
 object SucceedNow extends ZIOApp:
   val peterZIO: ZIO[Person] = ZIO.succeedNow(Person.peter)
   override def run: ZIO[Person] = peterZIO
