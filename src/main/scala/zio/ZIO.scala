@@ -1,5 +1,6 @@
 package zio
 
+import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.ExecutionContext
 
 trait Fiber[+A]:
@@ -7,26 +8,45 @@ trait Fiber[+A]:
   def join: ZIO[A]
 
 class FiberImpl[A](zio: ZIO[A]) extends Fiber[A]:
-  var maybeResult: Option[A] = None
-  var callbacks = List.empty[A => Any]
+
+  sealed trait FiberState
+  case class Running(callbacks: List[A => Any]) extends FiberState
+  case class Done(result: A) extends FiberState
+
+  val state: AtomicReference[FiberState] = new AtomicReference[FiberState](Running(List.empty))
+
+  def complete(result: A): Unit =
+    var loop = true
+    while (loop) {
+      val oldState = state.get()
+      oldState match
+        case Running(callbacks) =>
+          if state.compareAndSet(oldState, Done(result)) then
+            callbacks.foreach(callback => callback(result))
+            loop = false
+        case Done(result) =>
+          throw new Exception("Internal defect: Fiber being completed multiple times")
+    }
+
+  def await(callback: A => Any): Unit =
+    var loop = true
+    while (loop) {
+      val oldState = state.get()
+      oldState match
+        case Running(callbacks) =>
+          val newState = Running(callback :: callbacks)
+          loop = !state.compareAndSet(oldState, newState)
+        case Done(result) =>
+          loop = false
+          callback(result)
+    }
+
   override def start(): Unit = 
     ExecutionContext.global.execute { () =>
-      zio.run { a =>
-        maybeResult = Some(a)
-        callbacks.foreach { callback =>
-          callback(a)
-        }
-      }
+      zio.run(complete)
     }
   override def join: ZIO[A] = 
-    maybeResult match
-      case Some(a) =>
-        ZIO.succeedNow(a)
-      case None =>
-        ZIO.async { complete =>
-          callbacks = complete :: callbacks
-        }
-
+    ZIO.async(await)
 
 sealed trait ZIO[+A]:
   self =>
@@ -60,9 +80,8 @@ sealed trait ZIO[+A]:
     def zipPar[B](that: ZIO[B]): ZIO[(A, B)] = 
       for {
         fiberA <- self.fork
-        fiberB <- that.fork
+        b <- that
         a <- fiberA.join
-        b <- fiberB.join
       } yield (a, b)
 
     def map[B](f: A => B): ZIO[B] = 
@@ -126,10 +145,9 @@ sealed trait ZIO[+A]:
                 }
 
             case ZIO.Fork(zio) =>
-              ???
-  //            val fiber = new FiberImpl(zio)
-  //            fiber.start()
-  //            callback(fiber)
+              val fiber = new FiberImpl(zio)
+              fiber.start()
+              complete(fiber)
         }
       run()
 
